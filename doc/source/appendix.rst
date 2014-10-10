@@ -1,7 +1,0 @@
-########
-Appendix
-########
-
-.. toctree::
-
-   changes
