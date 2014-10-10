@@ -2,10 +2,13 @@ import unittest
 import rpy2.robjects as robjects
 ri = robjects.rinterface
 import array, time, sys
+import time
+import datetime
 import rpy2.rlike.container as rlc
 from collections import OrderedDict
 
-IS_PYTHON3 = sys.version_info[0] == 3
+if sys.version_info[0] == 2:
+    range = xrange
 
 
 rlist = robjects.baseenv["list"]
@@ -50,13 +53,22 @@ class VectorTestCase(unittest.TestCase):
         self.assertEqual(False, vec[1])
         self.assertEqual(2, len(vec))
 
-    def testNewListVector(self):
-        vec = robjects.ListVector({'a': 1, 'b': 2})
+    def _testNewListVector(self, vec):
         self.assertTrue('a' in vec.names)
         self.assertTrue('b' in vec.names)
         self.assertEqual(2, len(vec))
         self.assertEqual(2, len(vec.names))
 
+    def testNewListVector(self):
+        vec = robjects.ListVector({'a': 1, 'b': 2})
+        self._testNewListVector(vec)
+        s = (('a', 1), ('b', 2))
+        vec = robjects.ListVector(s)
+        self._testNewListVector(vec)
+        it = iter(s)
+        vec = robjects.ListVector(s)
+        self._testNewListVector(vec)
+        
     def testAddOperators(self):
         seq_R = robjects.r["seq"]
         mySeqA = seq_R(0, 3)
@@ -233,13 +245,25 @@ class DateTimeVectorTestCase(unittest.TestCase):
         x = [time.struct_time(_dateval_tuple), 
              time.struct_time(_dateval_tuple)]
         x.append('foo')
-        self.assertRaises(ValueError, robjects.POSIXct, x)
+        # string 'foo' does not have attribute 'tm_zone'  
+        self.assertRaises(AttributeError, robjects.POSIXct, x)
 
     def testPOSIXct_fromPythonTime(self):
         x = [time.struct_time(_dateval_tuple), 
              time.struct_time(_dateval_tuple)]
         res = robjects.POSIXct(x)
         self.assertEqual(2, len(x))
+
+    def testPOSIXct_fromPythonDatetime(self):
+        x = [datetime.datetime(*_dateval_tuple[:-2]), 
+             datetime.datetime(*_dateval_tuple[:-2])]
+        res = robjects.POSIXct(x)
+        self.assertEqual(2, len(x))
+
+    def testPOSIXct_fromSexp(self):
+        sexp = robjects.r('ISOdate(2013, 12, 11)')
+        res = robjects.POSIXct(sexp)
+        self.assertEqual(1, len(res))
 
 class ExtractDelegatorTestCase(unittest.TestCase):
 

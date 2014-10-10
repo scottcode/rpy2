@@ -12,7 +12,7 @@
  * for the specific language governing rights and limitations under the
  * License.
  * 
- * Copyright (C) 2008-2012 Laurent Gautier
+ * Copyright (C) 2008-2013 Laurent Gautier
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -96,40 +96,68 @@ SEXP rpy_list_attr(SEXP sexp)
   return res;
 }
 
-SEXP rpy_remove(SEXP symbol, SEXP env, SEXP rho)
+
+SEXP rpy_remove(SEXP symbol, SEXP env, SEXP inherits)
 {
-  SEXP c_R, call_R, res;
-
-  static SEXP fun_R = NULL;
-  if (fun_R == NULL) {
-    PROTECT(fun_R = PyRinterface_FindFun(install("rm"), rho));
-    /* FIXME: or use the rpy2 object tracking layer ?*/
-    R_PreserveObject(fun_R);
-    UNPROTECT(1);
-  }
-  
-  if(!isEnvironment(rho)) error("'rho' should be an environment");
-  /* incantation to summon R */
-  PROTECT(c_R = call_R = allocList(2+1));
-  SET_TYPEOF(c_R, LANGSXP);
-  SETCAR(c_R, fun_R);
-  c_R = CDR(c_R);
-
-  /* first argument is the name of the variable to be removed */
-  SETCAR(c_R, symbol);
-  //SET_TAG(c_R, install("list"));
-  c_R = CDR(c_R);
-
-  /* second argument is the environment in which the variable 
-     should be removed  */
-  SETCAR(c_R, env);
-  SET_TAG(c_R, install("envir"));
-  c_R = CDR(c_R);
-
-  int error = 0;
-  PROTECT(res = R_tryEval(call_R, rho, &error));
-
-  UNPROTECT(2);
-  return res;
+  SEXP internalSym = Rf_install(".Internal");
+  SEXP removeSym = Rf_install("remove");
+  SEXP call;
+  PROTECT(call = Rf_lang2(internalSym,
+			  Rf_lang4(removeSym, 
+				   symbol,
+				   env, 
+				   inherits))
+	  );
+  SEXP result = Rf_eval( call, R_GlobalEnv ) ;
+  UNPROTECT(1);
+  return result;
 }
 
+SEXP rpy_newenv(SEXP hash, SEXP parent, SEXP size)
+{
+  SEXP internalSym = Rf_install(".Internal");
+  SEXP newenvSym = Rf_install("new.env");
+  SEXP call;
+  PROTECT(call = Rf_lang2(internalSym,
+			  Rf_lang4(newenvSym, 
+				   hash,
+				   parent, 
+				   size))
+	  );
+  SEXP result = Rf_eval( call, R_GlobalEnv ) ;
+  UNPROTECT(1);
+  return result;
+}
+
+SEXP
+rpy_lang2str(SEXP sexp, SEXPTYPE t) {
+  SEXP symbol = CAR(sexp);
+  static struct{
+    SEXP if_sym;
+    SEXP while_sym;
+    SEXP for_sym; 
+    SEXP eq_sym;
+    SEXP gets_sym;
+    SEXP lpar_sym; 
+    SEXP lbrace_sym;
+    SEXP call_sym;
+  } s_str = {0, 0, 0, 0, 0, 0, 0, 0};
+  if(!s_str.if_sym) {
+    s_str.if_sym = install("if");
+    s_str.while_sym = install("while");
+    s_str.for_sym = install("for");
+    s_str.eq_sym = install("=");
+    s_str.gets_sym = install("<-");
+    s_str.lpar_sym = install("(");
+    s_str.lbrace_sym = install("{");
+    s_str.call_sym = install("call");
+  }
+  if(Rf_isSymbol(symbol)) {
+    if(symbol == s_str.if_sym || symbol == s_str.for_sym || symbol == s_str.while_sym ||
+       symbol == s_str.lpar_sym || symbol == s_str.lbrace_sym ||
+       symbol == s_str.eq_sym || symbol == s_str.gets_sym)
+      return PRINTNAME(symbol);
+  }
+  return PRINTNAME(s_str.call_sym);
+	
+}

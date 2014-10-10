@@ -1,5 +1,5 @@
 import unittest
-import sys, io
+import sys, io, tempfile
 import rpy2.robjects as robjects
 import rpy2.robjects.packages as packages
 from rpy2.rinterface import RRuntimeError
@@ -85,7 +85,11 @@ class ImportrTestCase(unittest.TestCase):
         path = 'coin"coin'
 
         with self.assertRaises(RRuntimeError):
-            tmp_file = io.StringIO()
+            if sys.version_info[0] == 3:
+                tmp_file = io.StringIO()
+            else:
+                # no need to test which Python 2, only 2.7 supported
+                tmp_file = tempfile.NamedTemporaryFile()
 
             stdout = sys.stdout
             sys.stdout = tmp_file
@@ -101,6 +105,9 @@ class ImportrTestCase(unittest.TestCase):
         self.assertTrue(isinstance(datasets, robjects.packages.Package))
         self.assertTrue(isinstance(datasets.__rdata__, 
                                    robjects.packages.PackageData))
+        self.assertTrue(isinstance(robjects.packages.data(datasets), 
+                                   robjects.packages.PackageData))
+        
 
 
         
@@ -110,11 +117,21 @@ class WherefromTestCase(unittest.TestCase):
         rnorm_pack = robjects.packages.wherefrom('rnorm')
         self.assertEqual('package:stats',
                           rnorm_pack.do_slot('name')[0])
+
+class InstalledPackagesTestCase(unittest.TestCase):
+    def testNew(self):
+        instapacks = robjects.packages.InstalledPackages()
+        res = instapacks.isinstalled('foo')
+        self.assertTrue(isinstance(res, bool))
+        ncols = len(instapacks.colnames)
+        for row in instapacks:
+            self.assertEqual(ncols, len(row))
         
 def suite():
     suite = unittest.TestLoader().loadTestsFromTestCase(PackagesTestCase)
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(ImportrTestCase))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(WherefromTestCase))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(InstalledPackagesTestCase))
     suite.addTest(unittest.TestLoader().loadTestsFromTestCase(SignatureTranslatedAnonymousPackagesTestCase))
     return suite
 
