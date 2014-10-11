@@ -29,7 +29,7 @@ if len(R_HOME) == 0:
                                          0, win32con.KEY_QUERY_VALUE )
             R_HOME = win32api.RegQueryValueEx(hkey, "InstallPath")[0]
             win32api.RegCloseKey( hkey )
-        except ImportError as ie:
+        except ImportError(ie):
             raise RuntimeError(
                 "No environment variable R_HOME could be found, "
                 "calling the command 'R RHOME' does not return anything, " +\
@@ -70,8 +70,8 @@ if sys.platform == 'win32':
         raise ValueError("Unknown architecture %s" %architecture)
 
     import win32api
-    os.environ['PATH'] += ';' + os.path.join(R_HOME, 'bin')
-    os.environ['PATH'] += ';' + os.path.join(R_HOME, 'modules')
+    os.environ['PATH'] += ';' + os.path.join(R_HOME, 'bin', _win_bindir)
+    os.environ['PATH'] += ';' + os.path.join(R_HOME, 'modules', _win_bindir)
     os.environ['PATH'] += ';' + os.path.join(R_HOME, 'lib')
 
     # Load the R dll using the explicit path
@@ -119,10 +119,18 @@ def consoleFlush():
 
 set_flushconsole(consoleFlush)
 
-def consoleRead(prompt):
-    text = raw_input(prompt)
-    text += "\n"
-    return text
+# wrapper in case someone changes sys.stdout:
+if sys.version_info.major == 3:
+    # 'raw_input()' became 'input()' in Python 3
+    def consoleRead(prompt):
+        text = input(prompt)
+        text += "\n"
+        return text
+else:
+    def consoleRead(prompt):
+        text = raw_input(prompt)
+        text += "\n"
+        return text
 
 set_readconsole(consoleRead)
 

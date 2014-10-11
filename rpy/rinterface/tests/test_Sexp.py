@@ -54,7 +54,11 @@ class SexpTestCase(unittest.TestCase):
         for i, n in enumerate(iris_names):
             self.assertEqual(iris_names[i], names[i])
 
-        self.assertRaises(LookupError, sexp.do_slot, "foo")  
+        self.assertRaises(LookupError, sexp.do_slot, "foo")
+
+    def testDo_slot_emptyString(self):
+        sexp = rinterface.baseenv.get('pi')
+        self.assertRaises(ValueError, sexp.do_slot, "")
 
     def testDo_slot_assign(self):
         data_func = rinterface.baseenv.get("data")
@@ -72,6 +76,13 @@ class SexpTestCase(unittest.TestCase):
         slot = x.do_slot("foo")
         self.assertEqual(1, len(slot))
         self.assertEqual("bar", slot[0])
+
+    def testDo_slot_assign_emptyString(self):
+        #test that assigning slots is also creating the slot
+        x = rinterface.IntSexpVector([1,2,3])
+        self.assertRaises(ValueError, 
+                          x.do_slot_assign, "", 
+                          rinterface.StrSexpVector(["bar", ]))
 
     def testSexp_rsame_true(self):
         sexp_a = rinterface.baseenv.get("letters")
@@ -102,7 +113,20 @@ class SexpTestCase(unittest.TestCase):
         d = dict(rinterface._rinterface.protected_rids())
         self.assertEqual(None, d.get(sexp2_rid))
 
+    def testSexp_rclass_get(self):
+        sexp = rinterface.baseenv.get("letters")
+        self.assertEqual(len(sexp.rclass), 1)
+        self.assertEqual(sexp.rclass[0], "character")
+        sexp = rinterface.baseenv.get("matrix")(0)
+        self.assertEqual(len(sexp.rclass), 1)
+        self.assertEqual(sexp.rclass[0], "matrix")
 
+    def testSexp_rclass_set(self):
+        sexp = rinterface.IntSexpVector([1,2,3])
+        sexp.rclass = rinterface.StrSexpVector(['foo'])
+        self.assertEqual(len(sexp.rclass), 1)
+        self.assertEqual(sexp.rclass[0], "foo")
+        
     def testSexp_sexp_wrongtypeof(self):
         sexp = rinterface.IntSexpVector([1,2,3])
         cobj = sexp.__sexp__

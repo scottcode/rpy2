@@ -1,8 +1,18 @@
 import unittest
 import pickle
+import multiprocessing
 import rpy2
 import rpy2.rinterface as rinterface
 import sys, os, subprocess, time, tempfile, io, signal, gc
+
+
+
+if sys.version_info[0] == 3:
+    IS_PYTHON3 = True
+else:
+    from itertools import izip as zip
+    range = xrange
+    IS_PYTHON3 = False
 
 rinterface.initr()
 
@@ -27,19 +37,35 @@ class EmbeddedRTestCase(unittest.TestCase):
 
 
     def testConsolePrint(self):
-        tmp_file = io.StringIO()
-        stdout = sys.stdout
-        sys.stdout = tmp_file
-        try:
-            rinterface.consolePrint('haha')
-        except Exception as e:
+        if sys.version_info[0] == 3:
+            tmp_file = io.StringIO()
+            stdout = sys.stdout
+            sys.stdout = tmp_file
+            try:
+                rinterface.consolePrint('haha')
+            except Exception as e:
+                sys.stdout = stdout
+                raise e
             sys.stdout = stdout
-            raise e
-        sys.stdout = stdout
-        tmp_file.flush()
-        tmp_file.seek(0)
-        self.assertEqual('haha', ''.join(s for s in tmp_file).rstrip())
-        tmp_file.close()
+            tmp_file.flush()
+            tmp_file.seek(0)
+            self.assertEqual('haha', ''.join(s for s in tmp_file).rstrip())
+            tmp_file.close()
+        else:
+            # no need to test which Python 2, only 2.7 supported
+            tmp_file = tempfile.NamedTemporaryFile()
+            stdout = sys.stdout
+            sys.stdout = tmp_file
+            try:
+                rinterface.consolePrint('haha')
+            except Exception as e:
+                sys.stdout = stdout
+                raise e
+            sys.stdout = stdout
+            tmp_file.flush()
+            tmp_file.seek(0)
+            self.assertEqual('haha', ''.join(s.decode() for s in tmp_file))
+            tmp_file.close()
 
 
     def testCallErrorWhenEndedR(self):
@@ -85,6 +111,16 @@ class EmbeddedRTestCase(unittest.TestCase):
     def testSet_initoptions(self):
         self.assertRaises(RuntimeError, rinterface.set_initoptions, 
                           ('aa', '--verbose', '--no-save'))
+
+    def testInitr(self):
+        def init_r(preserve_hash):
+            from rpy2 import rinterface
+            rinterface.initr(r_preservehash=preserve_hash)
+        preserve_hash = True
+        proc = multiprocessing.Process(target=init_r,
+                                       args=(preserve_hash,))
+        proc.start()
+        proc.join()
 
     def testParse(self):
         xp = rinterface.parse("2 + 3")
@@ -142,6 +178,10 @@ class EmbeddedRTestCase(unittest.TestCase):
         rpy_code = tempfile.NamedTemporaryFile(mode = 'w', suffix = '.py',
                                                delete = False)
         rpy2_path = os.path.dirname(rpy2.__path__[0])
+        if IS_PYTHON3:
+            pyexception_as = ' as'
+        else:
+            pyexception_as = ','
 
         rpy_code_str = """
 import sys
@@ -159,13 +199,13 @@ rcode += "Sys.sleep(0.01); "
 rcode += "}"
 try:
   ri.baseenv['eval'](ri.parse(rcode))
-except Exception as e:
+except Exception%s e:
   sys.exit(0)
-  """ %(rpy2_path)
+  """ %(rpy2_path, pyexception_as)
 
         rpy_code.write(rpy_code_str)
         rpy_code.close()
-        child_proc = subprocess.Popen(('python', rpy_code.name))
+        child_proc = subprocess.Popen((sys.executable, rpy_code.name))
         time.sleep(1)  # required for the SIGINT to function
         # (appears like a bug w/ subprocess)
         # (the exact sleep time migth be machine dependent :( )

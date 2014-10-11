@@ -6,17 +6,17 @@ import packages is to use `importr()`, for example
 with ggplot2::
 
     from rpy2.robjects.packages import importr
-    ggplot2 = robjects.baseenv.get('ggplot2')
+    ggplot2 = importr('ggplot2')
 
 This module is an supplementary layer in which an attempt
-at modelling the package as it was really developped
+at modelling the package as it was really developed
 as Python package is made. Behind the scene, `importr()`
 is used and can be accessed with:
 
     from robjects.robjects.lib import ggplot2
     ggplot2.ggplot2
 
-Ggplot2 is designed using a prototype-based approach to
+GGplot2 is designed using a prototype-based approach to
 Object-Oriented Programming, and this module is trying
 to define class-hierachies so the nature of a given
 instance can be identified more easily.
@@ -43,7 +43,6 @@ and provide a more dynamic mapping.
 """
 
 
-import rpy2.robjects.methods
 import rpy2.robjects as robjects
 import rpy2.robjects.conversion as conversion
 import rpy2.rinterface as rinterface
@@ -53,13 +52,9 @@ import warnings
 
 NULL = robjects.NULL
 
-#getmethod = robjects.baseenv.get("getMethod")
-
-rimport = robjects.baseenv.get('library')
-
 ggplot2 = importr('ggplot2')
 
-TARGET_VERSION = '0.9.3.1'
+TARGET_VERSION = '1.0.0'
 if ggplot2.__version__ != TARGET_VERSION:
    warnings.warn('This was designed againt ggplot2 version %s but you have %s' % (TARGET_VERSION, ggplot2.__version__))
 ggplot2_env = robjects.baseenv['as.environment']('package:ggplot2')
@@ -84,6 +79,7 @@ class GGPlot(robjects.RObject):
     @classmethod
     def new(cls, data):
         """ Constructor for the class GGplot. """
+        data = conversion.py2ri(data)
         res = cls(cls._constructor(data))
         return res
     
@@ -94,7 +90,11 @@ class GGPlot(robjects.RObject):
         res = self._add(self, obj)
         if res.rclass[0] != 'gg':
             raise ValueError("Added object did not give a ggplot result (get class '%s')." % res.rclass[0])
-        return GGPlot(res)
+        return self.__class__(res)
+
+    def save(self, filename, **kwargs):
+        """ Save the plot ( calls R's `ggplot2::ggsave()` ) """
+        ggplot2.ggsave(filename=filename, plot=self, **kwargs)
 
 ggplot = GGPlot.new
 
@@ -111,11 +111,10 @@ class Aes(robjects.Vector):
     def new(cls, **kwargs):
         """Constructor for the class Aes."""
         new_kwargs = copy.copy(kwargs)
-        for k,v in kwargs.iteritems():
+        for k,v in kwargs.items():
             new_kwargs[k] = as_symbol(v)
         res = cls(cls._constructor(**new_kwargs))
         return res
-
 aes = Aes.new
 
 class AesString(robjects.Vector):
@@ -437,6 +436,10 @@ class GeomQuantile(Geom):
     _constructor = ggplot2_env['geom_quantile']
 geom_quantile = GeomQuantile.new
 
+class GeomRaster(Geom):
+    _constructor = ggplot2_env['geom_raster']
+geom_raster = GeomRaster.new
+
 class GeomRect(Geom):
     _constructor = ggplot2_env['geom_rect']
 geom_rect = GeomRect.new
@@ -508,6 +511,10 @@ scale_shape = ScaleShape.new
 class ScaleSize(Scale):
     _constructor = ggplot2_env['scale_size']
 scale_size = ScaleSize.new
+
+class ScaleShapeDiscrete(Scale):
+   _constructor = ggplot2_env['scale_shape_discrete']
+scale_shape_discrete = ScaleShapeDiscrete.new
 
 class ScaleFill(Scale):
     pass
@@ -639,6 +646,12 @@ class ScaleShapeManual(ScaleShape):
 scale_shape_manual = ScaleShapeManual.new
 
 
+
+guides = ggplot2.guides
+guide_colorbar = ggplot2.guide_colorbar
+guide_colourbar = ggplot2.guide_colourbar
+guide_legend = ggplot2.guide_legend
+
 class Options(robjects.Vector):
    def __init__(self, obj):
       self.__sexp__ = obj.__sexp__
@@ -664,7 +677,25 @@ class ElementText(Element):
        return res
 element_text = ElementText.new
 
+class ElementRect(Element):
+    _constructor = ggplot2.element_rect
+    @classmethod
+    def new(cls, fill = NULL, colour = NULL, size = NULL,
+            linetype = NULL, color = NULL):
+       res = cls(cls._constructor(fill = fill, colour = colour,
+                                  size = size, linetype = linetype,
+                                  color = color))
+       return res
+element_rect = ElementRect.new
 
+class Labs(Options):
+   _constructor = ggplot2.labs
+   @classmethod
+   def new(cls, **kwargs):
+      res = cls(cls._constructor(**kwargs))
+      return res
+
+labs = Labs.new
 
 class Theme(Options):
    pass
@@ -697,6 +728,16 @@ class ThemeGrey(Theme):
        return res
 
 theme_grey = ThemeGrey.new
+
+class ThemeClassic(Theme):
+    _constructor = ggplot2.theme_classic
+    @classmethod
+    def new(cls, base_size = 12, base_family = ""):
+       res = cls(cls._constructor(base_size = base_size,
+                                  base_family = base_family))
+       return res
+
+theme_classic = ThemeClassic.new
 
 class ThemeRect(Theme):
     _constructor = ggplot2.theme_rect
@@ -759,19 +800,22 @@ theme = ggplot2_env['theme']
 
 ggtitle = ggplot2.ggtitle
 
-original_conversion = conversion.ri2py
+original_ri2ro = conversion.ri2ro
 def ggplot2_conversion(robj):
 
-    pyobj = original_conversion(robj)
+    pyobj = original_ri2ro(robj)
 
-    rcls = pyobj.rclass
-    if rcls is NULL:
-       rcls = (None, )
+    try:
+       rcls = pyobj.rclass
+    except AttributeError:
+       # conversion lead to something that is no
+       # longer an R object
+       return pyobj
 
-    if 'gg' in rcls:
+    if (rcls is not None) and ('gg' in rcls):
        pyobj = GGPlot(pyobj)
 
     return pyobj
 
-conversion.ri2py = ggplot2_conversion
+conversion.ri2ro = ggplot2_conversion
 
