@@ -91,12 +91,19 @@ def cmp_version(x, y):
 
 class RExec(object):
     """ Compilation-related configuration parameters used by R. """
+    BINARY_BASE = 'R'
+    WIN_BINARY_EXT = '.exe'
+    BINARY_FNAME = None
 
     def __init__(self, r_home):
-        if sys.platform == "win32" and "64 bit" in sys.version:
-            r_exec = os.path.join(r_home, 'bin', 'x64', 'R')
+        if 'win' in sys.platform.lower():
+            self.BINARY_FNAME = self.BINARY_BASE + self.WIN_BINARY_EXT
         else:
-            r_exec = os.path.join(r_home, 'bin', 'R')
+            self.BINARY_FNAME = self.BINARY_BASE
+        if sys.platform == "win32" and "64 bit" in sys.version:
+            r_exec = os.path.join(r_home, 'bin', 'x64', self.BINARY_FNAME)
+        else:
+            r_exec = os.path.join(r_home, 'bin', self.BINARY_FNAME)
         self._r_exec = r_exec
         self._version = None
 
@@ -104,8 +111,15 @@ class RExec(object):
     def version(self):
         if self._version is not None:
             return self._version
-        output = subprocess.check_output((self._r_exec, '--version'), 
-                                         universal_newlines = True)
+        p = subprocess.Popen(
+            (self._r_exec, '--version'),
+            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE
+        )
+        p_out, p_err = p.communicate()
+
+        # some R versions return the version info in stderr instead of stdout
+        output = p_out or p_err
         output = iter(output.split(os.linesep))
         rversion = next(output)
         #Twist if 'R RHOME' spits out a warning
@@ -174,7 +188,14 @@ def getRinterface_ext():
 
     try:
         r_home = subprocess.check_output(("R", "RHOME"),
-                                         universal_newlines=True)
+                                         universal_newlines=False)
+    except WindowsError:
+        # try again, looking for "R.bat" in the PATH
+        try:
+            r_home = subprocess.check_output(("R.bat", "RHOME"),
+                                             universal_newlines=False)
+        except:
+            raise SystemExit("Error: Tried to guess R's HOME but no R command in the PATH.")
     except:
         raise SystemExit("Error: Tried to guess R's HOME but no R command in the PATH.")
 
